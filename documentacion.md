@@ -1,14 +1,14 @@
 # Documentación de Infraestructura como Código con Terraform (AWS)
 
 > **Documento sincronizado automáticamente** desde el cuaderno web [Computación Grid y Cloud](https://apuntes-grid-cloud.vercel.app/) mediante `node scripts/construir.mjs`.
-> Para estudiar la versión web completa (con todos los temas del curso y diagramas interactivos), abre: **[https://apuntes-grid-cloud.vercel.app/](https://apuntes-grid-cloud.vercel.app/)**.
+> Para estudiar la versión web completa (con los 12 temas, flashcards, modo oscuro y diagramas ampliables), abre: **[https://apuntes-grid-cloud.vercel.app/](https://apuntes-grid-cloud.vercel.app/)**.
 
 ---
 
 ## Tabla de Contenidos
 
 - [Parte I — Teoría, Anatomía HCL y Comandos (Tema 6)](#6-infraestructura-como-código-con-terraform)
-- [Parte II — Talleres Prácticos: Taller 8 y Taller 12 (Tema 10)](#10-talleres-prácticos-de-terraform-ec2-y-efs)
+- [Parte II — Talleres Prácticos: Taller 8 y Taller 12 (Tema 12)](#12-talleres-prácticos-de-terraform-ec2-y-efs)
 
 ---
 
@@ -195,13 +195,13 @@ flowchart LR
 
 ### Conceptos relacionados
 
-- [Talleres prácticos de Terraform: Taller 8 (EC2) y Taller 12 (EC2 + SG EFS)](https://apuntes-grid-cloud.vercel.app/#10-talleres-terraform).
+- [Talleres prácticos de Terraform: Taller 8 (EC2) y Taller 12 (EC2 + SG EFS)](https://apuntes-grid-cloud.vercel.app/#12-talleres-terraform).
 - [Redes y seguridad: VPC y Security Groups](https://apuntes-grid-cloud.vercel.app/#03-redes-seguridad).
 - [Consola, AWS CLI y SDK](https://apuntes-grid-cloud.vercel.app/#05-herramientas-aws).
 
 ---
 
-## 10. Talleres prácticos de Terraform (EC2 y EFS)
+## 12. Talleres prácticos de Terraform (EC2 y EFS)
 
 Análisis práctico del repositorio de código [Aryy234/cloud-u1-ps-ae](https://github.com/Aryy234/cloud-u1-ps-ae), mostrando la evolución real entre **`taller8-ae2`** (despliegue básico en un solo archivo) y **`taller12-efs-ae`** (arquitectura modular con variables, outputs, `count` y reglas de red entre Security Groups para Amazon EFS).
 

@@ -35,11 +35,16 @@ flowchart LR
 
 | Archivo / Carpeta | ¿Para qué sirve? | ¿Se sube a Git? |
 | :--- | :--- | :--- |
-| `*.tf` (`main.tf`, `variable.tf`, `outputs.tf`) | Código fuente HCL. Terraform lee **todos** los `.tf` del directorio como un único conjunto. | **Sí** |
+| `main.tf` | Archivo principal con los recursos (`resource`) y el proveedor (`provider`). | **Sí** |
+| `variables.tf` | Declara las **variables de entrada** (`variable`) para parametrizar el proyecto sin escribir valores fijos. *(Convención oficial en plural; Terraform lee cualquier `*.tf`, por eso `variable.tf` también funciona).* | **Sí** |
+| `outputs.tf` | Declara las **salidas** (`output`) que se muestran en consola al desplegar y se exponen para otros módulos o scripts. | **Sí** |
+| `terraform.tfvars` *(opcional)* | Asigna valores concretos a las variables definidas en `variables.tf` (por ejemplo, distintos valores para desarrollo vs. producción). | Depende (no si tiene secretos) |
 | `.terraform/` | Carpeta oculta donde `terraform init` descarga el plugin del proveedor (ej. `hashicorp/aws`). | **No** |
 | `.terraform.lock.hcl` | Archivo candado que fija la versión exacta del proveedor para despliegues reproducibles. | **Sí** (recomendado) |
 | `terraform.tfstate` | **Archivo de estado.** Mapea tu código con los recursos reales en AWS (IDs, IPs, etc.). Permite saber qué actualizar o destruir. | **No** (puede contener datos sensibles) |
 | `terraform.tfstate.backup` | Respaldo automático del estado inmediatamente anterior al último cambio. | **No** |
+
+> **Regla clave de organización:** Terraform lee **todos los archivos `.tf`** de la carpeta como un solo bloque lógico. Separar en `main.tf`, `variables.tf` y `outputs.tf` no cambia la ejecución, pero mantiene el código limpio, reutilizable y fácil de mantener.
 
 ---
 
@@ -82,8 +87,8 @@ Es clave distinguir **tres nombres distintos**:
 | `aws_vpc_security_group_egress_rule` | EC2 / VPC | Crea una **regla de salida** desacoplada y la vincula a un Security Group. |
 | `aws_instance` | EC2 | Aprovisiona una máquina virtual (instancia EC2) con AMI, tamaño, llave SSH y red. |
 
-#### 2.3 Bloque `variable` (Variables de entrada)
-Permite **parametrizar** el proyecto para evitar valores fijos (*hardcoded*) en `main.tf` y reutilizar la misma infraestructura cambiando solo parámetros.
+#### 2.3 Archivo `variables.tf` y bloque `variable` (Variables de entrada)
+El archivo **`variables.tf`** centraliza los parámetros configurables del proyecto para evitar valores fijos (*hardcoded*) en `main.tf` y reutilizar la misma infraestructura cambiando solo datos (región, AMI, tipo de instancia, llave SSH o cantidad).
 
 ```hcl
 variable "cantidad_instancias" {
@@ -100,10 +105,14 @@ variable "cantidad_instancias" {
 | `type` | No (recomendado) | Restringe el tipo de dato: `string`, `number`, `bool`, `list(...)`, `map(...)`, etc. |
 | `default` | No | Valor por defecto. Si se omite, Terraform lo pedirá por terminal al ejecutar `plan` o `apply`. |
 
-> **Tip:** Puedes sobrescribir cualquier variable desde la terminal sin editar archivos: `terraform apply -var="cantidad_instancias=3"`.
+**¿Cómo recibe sus valores una variable?** (de menor a mayor prioridad):
+1. Valor `default` dentro de `variables.tf`.
+2. Variables de entorno (`TF_VAR_<nombre>`).
+3. Archivo `terraform.tfvars` (se carga automáticamente si existe).
+4. Bandera en terminal: `terraform apply -var="cantidad_instancias=3"`.
 
-#### 2.4 Bloque `output` (Salidas)
-Expone en la terminal valores generados por AWS al terminar el despliegue (IDs, IPs públicas, zonas de disponibilidad) sin tener que buscarlos manualmente en la consola web.
+#### 2.4 Archivo `outputs.tf` y bloque `output` (Salidas)
+El archivo **`outputs.tf`** define qué valores generados por AWS quieres **imprimir en consola** al terminar `terraform apply` (o volver a consultar con `terraform output`), sin tener que buscarlos en la consola web. Además, permite **exponer esos datos** para que otros módulos de Terraform o scripts externos los consuman.
 
 ```hcl
 output "ip_publica_instancias" {
@@ -117,6 +126,7 @@ output "ip_publica_instancias" {
 | `"nombre"` | Sí | Nombre con el que se imprimirá la salida en terminal. |
 | `description` | No | Explica qué información devuelve la salida. |
 | `value` | Sí | Atributo o expresión de los recursos que se quiere mostrar. |
+| `sensitive` | No | Si es `true`, oculta el valor en la consola (útil para contraseñas o tokens). |
 
 #### 2.5 Expresiones y conceptos clave en HCL
 
@@ -124,6 +134,30 @@ output "ip_publica_instancias" {
 - **Meta-argumento `count` e interpolación `${...}`:** Con `count = var.cantidad_instancias`, Terraform crea *N* copias del recurso usando un índice `count.index` que inicia en `0`. Al escribir `"Mi instancia EFS - ${count.index + 1}"`, genera nombres numerados (`1`, `2`, ...).
 - **Expresión *Splat* (`[*]`):** Cuando un recurso usa `count`, se convierte en una lista. La sintaxis `aws_instance.mi_instancia-efs[*].public_ip` recorre todas las instancias y extrae una lista con el atributo `public_ip` de cada una.
 - **Funciones nativas (`length()`):** `length(aws_instance.mi_instancia-efs)` devuelve cuántos elementos fueron creados en esa lista de instancias.
+
+#### 2.6 Dependencia lineal vs. Dependencia cíclica (`Error: Cycle`)
+
+Internamente, Terraform construye un **grafo de dependencias** (DAG) para saber en qué orden crear y destruir recursos.
+
+- **Dependencia lineal (normal):** El recurso `B` necesita un dato de `A`, pero `A` no necesita nada de `B` (`A -> B`).
+  - *Ejemplo:* `aws_instance` usa `aws_security_group.mi-sg.id`. Terraform crea primero el Security Group y luego la instancia EC2.
+- **Dependencia cíclica (error):** Dos o más recursos **se necesitan mutuamente para poder crearse** (`A <-> B`). Terraform no puede decidir cuál va primero y aborta con `Error: Cycle`.
+
+##### ¿Dónde ocurre en nuestro contexto (Taller 12: EC2 + EFS)?
+
+Ocurre cuando **dos Security Groups se referencian entre sí mediante reglas inline** (dentro de cada bloque `aws_security_group`):
+1. `SG_Instancias` define un `egress` hacia `SG_EFS.id` (necesita que `SG_EFS` exista primero).
+2. `SG_EFS` define un `ingress` desde `SG_Instancias.id` (necesita que `SG_Instancias` exista primero).
+
+```mermaid
+%% diagram:dependencia-ciclica
+flowchart LR
+    SG1["SG Instancias (con egress inline)"] <-->|"Ciclo: ambos se necesitan primero"| SG2["SG EFS (con ingress inline)"]
+```
+
+**Solución (aplicada en el Taller 12):** Crear primero ambos Security Groups **vacíos** (sin reglas *inline*) y después agregar las reglas como **recursos separados** (`aws_vpc_security_group_ingress_rule` y `aws_vpc_security_group_egress_rule`). Así ambos IDs ya existen cuando se crean las reglas y el ciclo desaparece.
+
+> **Corrección importante sobre EC2 y Security Groups:** Crear una instancia EC2 que referencia un Security Group **NO es una dependencia cíclica**, sino una dependencia lineal (`SG -> EC2`): no hace falta crear la instancia sin SG y asociarlo después, porque el SG no depende de la instancia. La estrategia de «crear primero los recursos base vacíos y vincularlos después» aplica precisamente al caso de **dos Security Groups que se referencian mutuamente** (o si una regla del SG intentara leer la IP privada de la propia instancia que usa ese SG).
 
 ---
 
@@ -291,6 +325,8 @@ flowchart LR
 | `entrada_efs` | `ingress_rule` | Asociada al SG de EFS. Permite entrada `tcp` puerto `2049` **únicamente** desde recursos que pertenezcan al SG de instancias (`referenced_security_group_id = aws_security_group.mi-sg-efs-instancias-14.id`). |
 
 > **¿Por qué el SG de EFS no necesita reglas de salida?** Porque los Security Groups de AWS son **stateful**: al autorizar la entrada desde las EC2 por el puerto `2049`, el tráfico de respuesta queda permitido automáticamente.
+>
+> **¿Por qué separar las reglas en recursos independientes?** Además de seguir la buena práctica de AWS, **evita una dependencia cíclica (`Error: Cycle`)**: si `mi-sg-efs-instancias-14` y `mi-sg-efs-14` tuvieran reglas *inline* apuntándose mutuamente, Terraform no sabría cuál crear primero. Creándolos vacíos y añadiendo las reglas aparte se rompe el ciclo (ver [Tema 6 — Dependencia cíclica](https://apuntes-grid-cloud.vercel.app/#06-terraform)).
 
 ##### 3. Instancias EC2 (`aws_instance.mi_instancia-efs`)
 
